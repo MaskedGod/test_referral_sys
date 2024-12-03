@@ -50,9 +50,16 @@ class PhoneAuthView(APIView):
             },
             required=["phone_number"],
         ),
+        responses={200: "Verification code sent!", 400: "Invalid phone number"},
     )
     def post(self, request):
         phone_number = request.data.get("phone_number")
+
+        if not phone_number or not phone_number.isdigit():
+            return Response(
+                {"error": "Invalid or missing phone number."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         cache_key = f"verification_code_{phone_number}"
         cache.delete(cache_key)
@@ -89,23 +96,29 @@ class VerifyCodeView(APIView):
             },
             required=["phone_number", "code"],
         ),
+        responses={
+            200: "Verification successful",
+            400: "Invalid verification code",
+        },
     )
     def post(self, request):
         phone_number = request.data.get("phone_number")
         code = request.data.get("code")
-        custom_code = request.data.get("custom_code")
 
-        # Use custom_code if provided, otherwise use cached code
-        if custom_code:
-            cached_code = custom_code
-        else:
-            cached_code = cache.get(f"verification_code_{phone_number}")
+        cached_code = cache.get(f"verification_code_{phone_number}")
 
         if cached_code and cached_code == code:
-            user, created = User.objects.get_or_create(
-                phone_number=phone_number,
-                defaults={"invite_code": generate_invite_code()},
-            )
+            try:
+                user, created = User.objects.get_or_create(
+                    phone_number=phone_number,
+                    defaults={"invite_code": generate_invite_code()},
+                )
+            except Exception as e:
+                return Response(
+                    {"error": "Error creating or fetching user."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
             return Response(
                 {"invite_code": user.invite_code}, status=status.HTTP_200_OK
             )
@@ -132,12 +145,29 @@ class ProfileView(APIView):
                 default=1234567890,
             )
         ],
+        responses={
+            200: "Profile retrieved",
+            404: "User not found",
+        },
     )
     def get(self, request):
-        phone_number = request.data.get("phone_number")
-        user = User.objects.get(phone_number=phone_number)
-        serializer = UserSerializer(user)
-        return Response(serializer.data)
+        phone_number = request.query_params.get("phone_number")
+
+        if not phone_number or not phone_number.isdigit():
+            return Response(
+                {"error": "Invalid or missing phone number."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(phone_number=phone_number)
+            serializer = UserSerializer(user)
+            return Response(serializer.data)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "User with this phone number does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
     @swagger_auto_schema(
         operation_description="Activate an invite code for the user.",
@@ -152,18 +182,34 @@ class ProfileView(APIView):
                 "invite_code": openapi.Schema(
                     type=openapi.TYPE_STRING,
                     description="Code received by the user.",
-                    default=123456,
+                    default="QPwSTH",
                 ),
             },
             required=["phone_number", "invite_code"],
         ),
+        responses={
+            200: "Invite code activated!",
+            400: "Invalid invite code or already activated",
+        },
     )
     def post(self, request):
         phone_number = request.data.get("phone_number")
         invite_code = request.data.get("invite_code")
 
+        if not phone_number or not phone_number.isdigit():
+            return Response(
+                {"error": "Invalid or missing phone number."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         user = User.objects.get(phone_number=phone_number)
         referrer = User.objects.filter(invite_code=invite_code).first()
+
+        if referrer == user:
+            return Response(
+                {"error": "You cannot activate your own invite code."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if referrer and not user.activated_invite_code:
             user.activated_invite_code = invite_code
@@ -196,12 +242,27 @@ class ReferralListView(APIView):
                 default=1234567890,
             )
         ],
+        responses={
+            200: "Referral list retrieved",
+            404: "User not found",
+        },
     )
     def get(self, request):
-        phone_number = request.data.get("phone_number")
-        user = User.objects.get(phone_number=phone_number)
+        phone_number = request.query_params.get("phone_number")
 
-        referrals = Referral.objects.filter(referrer=user)
-        serializer = ReferralListSerializer(referrals, many=True)
+        if not phone_number or not phone_number.isdigit():
+            return Response(
+                {"error": "Invalid or missing phone number."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        return Response(serializer.data)
+        try:
+            user = User.objects.get(phone_number=phone_number)
+            referrals = Referral.objects.filter(referrer=user)
+            serializer = ReferralListSerializer(referrals, many=True)
+            return Response(serializer.data)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "User with this phone number does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
+            )

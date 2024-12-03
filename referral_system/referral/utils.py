@@ -17,6 +17,7 @@ def get_uptime():
 
 def generate_verification_code():
     """Returns 4 digits long code for verification"""
+    time.sleep(1.7)
     return str(random.randint(1000, 9999))
 
 
