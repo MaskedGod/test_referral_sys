@@ -111,8 +111,8 @@ This project is a referral system implementation for **Hammer Systems**. It incl
    ```
 
 6. **API Documentation:**
-   - Swagger: [http://localhost:8000/swagger/](http://localhost:8000/swagger/)
-   - ReDoc: [http://localhost:8000/redoc/](http://localhost:8000/redoc/)
+   - Swagger: [https://test-referral-sys.onrender.com/swagger/](https://test-referral-sys.onrender.com/swagger/)
+   - ReDoc: [https://test-referral-sys.onrender.com/redoc/](https://test-referral-sys.onrender.com/redoc/)
 
 ## API Endpoints
 
